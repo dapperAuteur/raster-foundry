@@ -47,9 +47,11 @@ object MapAlgebraAST {
   case class Masking(args: List[MapAlgebraAST], id: UUID, label: Option[String])
       extends Operation("mask")
 
-  case class Reclassification(args: List[MapAlgebraAST], id: UUID, label: Option[String], classBreaks: ClassBreaks)
-      extends Operation("reclassify")
+  case class IntReclassification(args: List[MapAlgebraAST], id: UUID, label: Option[String], classBreaks: IntClassBreaks)
+      extends Operation("intReclassify")
 
+  case class DoubleReclassification(args: List[MapAlgebraAST], id: UUID, label: Option[String], classBreaks: DoubleClassBreaks)
+      extends Operation("doubleReclassify")
 
   /** Map Algebra sources (leaves) */
   sealed abstract class Source[+T](val `type`: String) extends MapAlgebraAST {
