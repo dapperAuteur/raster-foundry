@@ -16,36 +16,54 @@ import spray.json._
 
 import java.net.URI
 
+import geotrellis.raster.io.geotiff.GeoTiff
+import org.apache.hadoop.fs.Path
+
 object Export extends SparkJob with LazyLogging {
 
   case class Params(
     jobDefinition: URI = new URI(""),
     testRun: Boolean = false,
-    overwrite: Boolean = false,
-    windowSize: Int = 1024,
-    partitionsPerFile: Int = 8
+    overwrite: Boolean = false
   )
-
-  type RfLayerWriter = (Reader[LayerId, RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]]])
 
   /** Get a LayerReader and an attribute store for the catalog located at the provided URI
     *
     * @param exportLayerDef export job's layer definition
     */
-  def getRfLayerManagement(exportLayerDef: ExportLayerDefinition)(implicit sc: SparkContext): (RfLayerWriter, AttributeStore) =
+  def getRfLayerManagement(exportLayerDef: ExportLayerDefinition)(implicit sc: SparkContext): (FilteringLayerReader[LayerId], AttributeStore) =
     exportLayerDef.ingestLocation.getScheme match {
       case "s3" | "s3a" | "s3n" =>
         val (bucket, prefix) = S3.parse(exportLayerDef.ingestLocation)
-        val layerReader = S3LayerReader(bucket, prefix)
-        val reader = layerReader.reader[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]]
-        (reader, layerReader.attributeStore)
+        val reader = S3LayerReader(bucket, prefix)
+        (reader, reader.attributeStore)
       case "file" =>
-        val layerReader = FileLayerReader(exportLayerDef.ingestLocation.getPath)
-        val reader = layerReader.reader[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]]
-        (reader, layerReader.attributeStore)
+        val reader = FileLayerReader(exportLayerDef.ingestLocation.getPath)
+        (reader, reader.attributeStore)
     }
 
   def exportProject(params: Params)(exportDefinition: ExportDefinition)(implicit sc: SparkContext) = {
+    val input = exportDefinition.input
+    val output = exportDefinition.output
+    input.layers.foreach { ld =>
+      val (reader, attributeStore) = getRfLayerManagement(ld)
+      val layerId = LayerId(ld.layerId.toString, input.resolution)
+      val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
+
+      val query = {
+        val q = reader.query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
+        input.mask.fold(q)(mp => q.where(Intersects(mp)))
+      }
+
+      query
+        .result
+        .mapValues { _.subsetBands(output.render.map(_.bands.toSeq).getOrElse(Seq())) }
+        .foreachPartition { _.foreach { case (key, tile) =>
+          val tiff = GeoTiff(tile.reproject(md.mapTransform(key), md.crs, output.crs), output.crs)
+          tiff.write(new Path(output.source))
+        } }
+
+    }
 
   }
 
@@ -66,8 +84,7 @@ object Export extends SparkJob with LazyLogging {
     implicit val sc = new SparkContext(conf)
 
     try {
-      //ingestDefinition.layers.foreach(ingestLayer(params))
-      //if (params.testRun) { ingestDefinition.layers.foreach(Validation.validateCatalogEntry) }
+      exportProject(params)(exportDefinition)
     } finally {
       sc.stop
     }

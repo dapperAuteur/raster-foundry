@@ -25,22 +25,14 @@ class ExportDefinitionSpec extends FunSpec with Matchers {
       id = UUID.fromString("dda6080f-f7ad-455d-b409-764dd8c57039"),
       input = InputDefinition(
         projectId = UUID.fromString("dda6080f-f7ad-455d-b409-764dd8c57036"),
+        resolution = 15,
         layers = Array(
           ExportLayerDefinition(
             layerId = UUID.fromString("8436f7e9-b7f7-4d4f-bda8-76b32c356cff"),
             ingestLocation = new URI("s3://test/"),
             attributes = List()
           )
-        )
-      ),
-      output = OutputDefinition(
-        crs = CRS.fromEpsgCode(32654),
-        rasterSize = Some(RasterSize(height = 256, width = 256)),
-        render = Some(Render(operation = "id", bands = Array(1, 2, 3))),
-        crop = false,
-        stitch = false,
-        source = new URI("s3://test/"),
-        resolution = 15,
+        ),
         mask = Some(
           """
             |{
@@ -74,6 +66,14 @@ class ExportDefinitionSpec extends FunSpec with Matchers {
             |    }
           """.stripMargin.parseJson.convertTo[MultiPolygon]
         )
+      ),
+      output = OutputDefinition(
+        crs = CRS.fromEpsgCode(32654),
+        rasterSize = Some(RasterSize(height = 256, width = 256)),
+        render = Some(Render(operation = "id", bands = Array(1, 2, 3))),
+        crop = false,
+        stitch = false,
+        source = new URI("s3://test/")
       )
     )
 

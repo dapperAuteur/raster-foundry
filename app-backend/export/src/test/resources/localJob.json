@@ -2,6 +2,7 @@
     "id":"dda6080f-f7ad-455d-b409-764dd8c57039",
     "input":{
         "projectId":"dda6080f-f7ad-455d-b409-764dd8c57036",
+        "resolution":15,
         "layers":[
             {
                 "layerId":"8436f7e9-b7f7-4d4f-bda8-76b32c356cff",
@@ -10,10 +11,7 @@
 
                 ]
             }
-        ]
-    },
-    "output":{
-        "source":"s3://test/",
+        ],
         "mask":{
             "type":"MultiPolygon",
             "coordinates":[
@@ -42,8 +40,10 @@
                     ]
                 ]
             ]
-        },
-        "resolution":15,
+        }
+    },
+    "output":{
+        "source":"s3://test/",
         "stitch":false,
         "render":{
             "operation":"id",
