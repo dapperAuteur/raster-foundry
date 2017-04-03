@@ -16,7 +16,7 @@ import java.net.URI
   * @param source output source [[URI]]
   */
 case class OutputDefinition(
-  crs: CRS,
+  crs: Option[CRS],
   rasterSize: Option[RasterSize],
   render: Option[Render],
   crop: Boolean,

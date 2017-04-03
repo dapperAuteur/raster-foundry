@@ -4,20 +4,19 @@ import com.azavea.rf.export.model._
 import com.azavea.rf.export.util._
 
 import geotrellis.raster._
+import geotrellis.raster.io.geotiff.{GeoTiff, MultibandGeoTiff}
 import geotrellis.spark._
 import geotrellis.spark.io._
+import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.file._
 import geotrellis.spark.io.s3._
 
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.hadoop.fs.Path
 import org.apache.spark._
-import org.apache.spark.rdd._
 import spray.json._
 
 import java.net.URI
-
-import geotrellis.raster.io.geotiff.GeoTiff
-import org.apache.hadoop.fs.Path
 
 object Export extends SparkJob with LazyLogging {
 
@@ -27,11 +26,16 @@ object Export extends SparkJob with LazyLogging {
     overwrite: Boolean = false
   )
 
+  // Functions for combine step
+  def createTiles(tile: MultibandGeoTiff): Seq[MultibandGeoTiff]                                       = Seq(tile)
+  def mergeTiles1(tiles: Seq[MultibandGeoTiff], tile: MultibandGeoTiff): Seq[MultibandGeoTiff]         = tiles :+ tile
+  def mergeTiles2(tiles1: Seq[MultibandGeoTiff], tiles2: Seq[MultibandGeoTiff]): Seq[MultibandGeoTiff] = tiles1 ++ tiles2
+
   /** Get a LayerReader and an attribute store for the catalog located at the provided URI
     *
     * @param exportLayerDef export job's layer definition
     */
-  def getRfLayerManagement(exportLayerDef: ExportLayerDefinition)(implicit sc: SparkContext): (FilteringLayerReader[LayerId], AttributeStore) =
+  def getRfLayerManagement(exportLayerDef: ExportLayerDefinition)(implicit @transient sc: SparkContext): (FilteringLayerReader[LayerId], AttributeStore) =
     exportLayerDef.ingestLocation.getScheme match {
       case "s3" | "s3a" | "s3n" =>
         val (bucket, prefix) = S3.parse(exportLayerDef.ingestLocation)
@@ -42,10 +46,10 @@ object Export extends SparkJob with LazyLogging {
         (reader, reader.attributeStore)
     }
 
-  def exportProject(params: Params)(exportDefinition: ExportDefinition)(implicit sc: SparkContext) = {
-    val input = exportDefinition.input
-    val output = exportDefinition.output
-    input.layers.foreach { ld =>
+  def exportProject(params: Params)(exportDefinition: ExportDefinition)(implicit @transient sc: SparkContext) = {
+    val wrappedConfiguration = HadoopConfiguration(sc.hadoopConfiguration)
+    val (input, output) = exportDefinition.input -> exportDefinition.output
+    input.layers.map { ld =>
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
@@ -57,15 +61,29 @@ object Export extends SparkJob with LazyLogging {
 
       query
         .result
-        .mapValues { _.subsetBands(output.render.map(_.bands.toSeq).getOrElse(Seq())) }
-        .foreachPartition { _.foreach { case (key, tile) =>
-          val tiff = GeoTiff(tile.reproject(md.mapTransform(key), md.crs, output.crs), output.crs)
-          tiff.write(new Path(output.source))
-        } }
-
+        .mapValues { tile =>
+          output.render.map(_.bands.toSeq) match {
+            case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
+            case _ => tile
+          }
+        }
+        .map { case (key, tile) =>
+          (key, output.crs match {
+            case Some(crs) => GeoTiff(tile.reproject(md.mapTransform(key), md.crs, crs), crs)
+            case _ => GeoTiff(tile, md.mapTransform(key), md.crs)
+          })
+        }
+    }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key: SpatialKey, seq: Seq[MultibandGeoTiff]) =>
+      val head = seq.head
+      key -> GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
+    }.foreachPartition { iter =>
+      val configuration = wrappedConfiguration.get
+      iter.foreach { case (key, tile) =>
+        tile.write(new Path(s"${output.source.toString}/${key.col}-${key.row}.tiff"), configuration)
+      }
     }
-
   }
+
 
   /** Sample ingest definitions can be found in the accompanying test/resources
     *

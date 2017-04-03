@@ -68,7 +68,7 @@ class ExportDefinitionSpec extends FunSpec with Matchers {
         )
       ),
       output = OutputDefinition(
-        crs = CRS.fromEpsgCode(32654),
+        crs = Some(CRS.fromEpsgCode(32654)),
         rasterSize = Some(RasterSize(height = 256, width = 256)),
         render = Some(Render(operation = "id", bands = Array(1, 2, 3))),
         crop = false,
