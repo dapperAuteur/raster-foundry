@@ -1,6 +1,5 @@
 package com.azavea.rf.export.model
 
-
 import geotrellis.proj4.CRS
 import geotrellis.vector._
 import geotrellis.vector.io._
@@ -69,7 +68,7 @@ class ExportDefinitionSpec extends FunSpec with Matchers {
       ),
       output = OutputDefinition(
         crs = Some(CRS.fromEpsgCode(32654)),
-        rasterSize = Some(RasterSize(height = 256, width = 256)),
+        rasterSize = Some(256),
         render = Some(Render(operation = "id", bands = Array(1, 2, 3))),
         crop = false,
         stitch = false,

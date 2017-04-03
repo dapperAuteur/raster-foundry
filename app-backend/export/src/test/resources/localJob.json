@@ -50,10 +50,7 @@
             "bands":[1, 2, 3]
         },
         "crop":false,
-        "rasterSize":{
-            "height":256,
-            "width":256
-        },
+        "rasterSize": 256,
         "crs":"epsg:32654"
     }
 }

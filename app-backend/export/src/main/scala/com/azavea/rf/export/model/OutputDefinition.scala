@@ -17,7 +17,7 @@ import java.net.URI
   */
 case class OutputDefinition(
   crs: Option[CRS],
-  rasterSize: Option[RasterSize],
+  rasterSize: Option[Int],
   render: Option[Render],
   crop: Boolean,
   stitch: Boolean,

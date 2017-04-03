@@ -7,11 +7,13 @@ import geotrellis.raster._
 import geotrellis.raster.io.geotiff.{GeoTiff, MultibandGeoTiff}
 import geotrellis.spark._
 import geotrellis.spark.io._
+import geotrellis.spark.tiling._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.file._
 import geotrellis.spark.io.s3._
 
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.spark.rdd.RDD
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import spray.json._
@@ -54,25 +56,44 @@ object Export extends SparkJob with LazyLogging {
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
 
-      val query = {
+      val query: RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]] = {
         val q = reader.query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
         input.mask.fold(q)(mp => q.where(Intersects(mp)))
-      }
+      } result
 
-      query
-        .result
-        .mapValues { tile =>
+      val bandsQuery = query.withContext {
+        _.mapValues { tile =>
           output.render.map(_.bands.toSeq) match {
             case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
             case _ => tile
           }
         }
-        .map { case (key, tile) =>
-          (key, output.crs match {
-            case Some(crs) => GeoTiff(tile.reproject(md.mapTransform(key), md.crs, crs), crs)
-            case _ => GeoTiff(tile, md.mapTransform(key), md.crs)
-          })
+      }
+
+      val reprojectedRdd: RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]] = output.crs match {
+        case Some(crs) => {
+          output.rasterSize match {
+            case Some(rs) =>
+              bandsQuery.reproject(ZoomedLayoutScheme(crs, rs))._2
+            case _ =>
+              bandsQuery.reproject(ZoomedLayoutScheme(crs))._2
+          }
         }
+        case _ => {
+          output.rasterSize match {
+            case Some(rs) =>
+              bandsQuery.reproject(ZoomedLayoutScheme(md.crs, rs))._2
+            case _ =>
+              bandsQuery.reproject(ZoomedLayoutScheme(md.crs))._2
+          }
+        }
+      }
+
+      val crs = reprojectedRdd.metadata.crs
+
+      reprojectedRdd.map { case (key, tile) =>
+        (key, GeoTiff(tile, md.mapTransform(key), crs))
+      }
     }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key, seq) =>
       val head = seq.head
       key -> GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)

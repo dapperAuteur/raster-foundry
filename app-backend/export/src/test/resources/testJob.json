@@ -19,7 +19,7 @@
             "bands":[4, 3, 2]
         },
         "crop":false,
-        "rasterSize":{ "height":256, "width":256 },
+        "rasterSize": 1024,
         "crs":"EPSG:3857"
     }
 }
