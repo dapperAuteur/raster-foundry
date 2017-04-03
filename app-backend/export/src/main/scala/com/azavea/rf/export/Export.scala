@@ -79,7 +79,10 @@ object Export extends SparkJob with LazyLogging {
     }.foreachPartition { iter =>
       val configuration = wrappedConfiguration.get
       iter.foreach { case (key, tile) =>
-        tile.write(new Path(s"${output.source.toString}/${key.col}-${key.row}.tiff"), configuration)
+        tile.write(
+          new Path(s"${output.source.toString}/${input.resolution}-${key.col}-${key.row}.tiff"),
+          configuration
+        )
       }
     }
   }
