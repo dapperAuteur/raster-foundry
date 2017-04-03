@@ -73,7 +73,7 @@ object Export extends SparkJob with LazyLogging {
             case _ => GeoTiff(tile, md.mapTransform(key), md.crs)
           })
         }
-    }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key: SpatialKey, seq: Seq[MultibandGeoTiff]) =>
+    }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key, seq) =>
       val head = seq.head
       key -> GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
     }.foreachPartition { iter =>
@@ -84,8 +84,8 @@ object Export extends SparkJob with LazyLogging {
     }
   }
 
-
-  /** Sample ingest definitions can be found in the accompanying test/resources
+  /**
+    *  Sample ingest definitions can be found in the accompanying test/resources
     *
     * @param args Arguments to be parsed by the tooling defined in [[CommandLine]]
     */
@@ -100,7 +100,6 @@ object Export extends SparkJob with LazyLogging {
     val exportDefinition = readString(params.jobDefinition).parseJson.convertTo[ExportDefinition]
 
     implicit val sc = new SparkContext(conf)
-
     try {
       exportProject(params)(exportDefinition)
     } finally {
@@ -108,4 +107,3 @@ object Export extends SparkJob with LazyLogging {
     }
   }
 }
-

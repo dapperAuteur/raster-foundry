@@ -12,7 +12,7 @@
         ]
     },
     "output":{
-        "source":"s3://rasterfoundry-test/daunnc-test",
+        "source":"file:///tmp",
         "stitch":false,
         "render":{
             "operation":"id",
