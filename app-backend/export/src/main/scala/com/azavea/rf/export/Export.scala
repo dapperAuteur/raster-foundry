@@ -47,7 +47,7 @@ object Export extends SparkJob with LazyLogging {
     }
 
   def exportProject(params: Params)(exportDefinition: ExportDefinition)(implicit @transient sc: SparkContext) = {
-    val wrappedConfiguration = HadoopConfiguration(sc.hadoopConfiguration)
+    val wrappedConfiguration = HadoopConfiguration(S3.setCredentials(sc.hadoopConfiguration))
     val (input, output) = exportDefinition.input -> exportDefinition.output
     input.layers.map { ld =>
       val (reader, attributeStore) = getRfLayerManagement(ld)

@@ -8,6 +8,12 @@ javaOptions += "-Xmx2G"
 
 fork in run := true
 
+// Optional deps for runing S3 Upload tests
+libraryDependencies ++= Seq(
+  "org.apache.hadoop" % "hadoop-aws" % "2.7.3",
+  "com.amazonaws" % "aws-java-sdk" % "1.7.4"
+)
+
 assemblyMergeStrategy in assembly := {
   case "reference.conf" => MergeStrategy.concat
   case "application.conf" => MergeStrategy.concat
