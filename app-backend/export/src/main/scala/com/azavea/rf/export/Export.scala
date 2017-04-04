@@ -20,11 +20,6 @@ import spray.json._
 import java.util.UUID
 
 object Export extends SparkJob with LazyLogging {
-  // Functions for combine step
-  def createTiles(tile: MultibandGeoTiff): Seq[MultibandGeoTiff]                                       = Seq(tile)
-  def mergeTiles1(tiles: Seq[MultibandGeoTiff], tile: MultibandGeoTiff): Seq[MultibandGeoTiff]         = tiles :+ tile
-  def mergeTiles2(tiles1: Seq[MultibandGeoTiff], tiles2: Seq[MultibandGeoTiff]): Seq[MultibandGeoTiff] = tiles1 ++ tiles2
-
   /** Get a LayerReader and an attribute store for the catalog located at the provided URI
     *
     * @param exportLayerDef export job's layer definition
@@ -73,15 +68,19 @@ object Export extends SparkJob with LazyLogging {
 
     if(!output.stitch) {
       val result =
-        rdds.map { rdd =>
-          val md = rdd.metadata
-          rdd.map { case (key, tile) =>
-            (key, GeoTiff(tile, md.mapTransform(key), md.crs))
+        rdds
+          .map { rdd =>
+            val md = rdd.metadata
+            rdd.map { case (key, tile) =>
+              (key, GeoTiff(tile, md.mapTransform(key), md.crs))
+            }
           }
-        }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key, seq) =>
-          val head = seq.head
-          key -> GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
-        }
+          .reduce(_ union _)
+          .combineByKey(createTiles[MultibandGeoTiff], mergeTiles1[MultibandGeoTiff], mergeTiles2[MultibandGeoTiff])
+          .mapValues { seq =>
+            val head = seq.head
+            GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
+          }
 
       result.foreachPartition { iter =>
         val configuration = wrappedConfiguration.get
@@ -94,7 +93,13 @@ object Export extends SparkJob with LazyLogging {
       }
     } else {
       val md = rdds.map(_.metadata).reduce(_ combine _)
-      val tile = ContextRDD(rdds.reduce((f, s) => f.withContext { _.union(s) }), md).stitch
+      val tile =
+        ContextRDD(
+          rdds
+            .reduce((f, s) => f.withContext { _.union(s) })
+            .combineByKey(createTiles[MultibandTile], mergeTiles1[MultibandTile], mergeTiles2[MultibandTile])
+            .mapValues { _.reduce(_ merge _) }, md
+        ).stitch
       val raster =
         if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope))
         else tile
