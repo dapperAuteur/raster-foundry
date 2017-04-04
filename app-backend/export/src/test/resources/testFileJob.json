@@ -16,9 +16,9 @@
         "stitch":false,
         "render":{
             "operation":"id",
-            "bands":[4, 3, 2]
+            "bands":[0, 1, 2]
         },
         "crop":false,
-        "rasterSize": 512
+        "rasterSize": 256
     }
 }

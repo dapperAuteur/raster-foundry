@@ -13,21 +13,11 @@ import geotrellis.spark.io.file._
 import geotrellis.spark.io.s3._
 
 import com.typesafe.scalalogging.LazyLogging
-import org.apache.spark.rdd.RDD
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import spray.json._
 
-import java.net.URI
-
 object Export extends SparkJob with LazyLogging {
-
-  case class Params(
-    jobDefinition: URI = new URI(""),
-    testRun: Boolean = false,
-    overwrite: Boolean = false
-  )
-
   // Functions for combine step
   def createTiles(tile: MultibandGeoTiff): Seq[MultibandGeoTiff]                                       = Seq(tile)
   def mergeTiles1(tiles: Seq[MultibandGeoTiff], tile: MultibandGeoTiff): Seq[MultibandGeoTiff]         = tiles :+ tile
@@ -48,15 +38,16 @@ object Export extends SparkJob with LazyLogging {
         (reader, reader.attributeStore)
     }
 
-  def exportProject(params: Params)(exportDefinition: ExportDefinition)(implicit @transient sc: SparkContext) = {
+  def exportProject(params: CommandLine.Params)(exportDefinition: ExportDefinition)(implicit @transient sc: SparkContext) = {
     val wrappedConfiguration = HadoopConfiguration(S3.setCredentials(sc.hadoopConfiguration))
     val (input, output) = exportDefinition.input -> exportDefinition.output
     input.layers.map { ld =>
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
+      val crs = output.crs.getOrElse(md.crs)
 
-      val query: RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]] = {
+      val query = {
         val q = reader.query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
         input.mask.fold(q)(mp => q.where(Intersects(mp)))
       } result
@@ -70,26 +61,12 @@ object Export extends SparkJob with LazyLogging {
         }
       }
 
-      val reprojectedRdd: RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]] = output.crs match {
-        case Some(crs) => {
-          output.rasterSize match {
-            case Some(rs) =>
-              bandsQuery.reproject(ZoomedLayoutScheme(crs, rs))._2
-            case _ =>
-              bandsQuery.reproject(ZoomedLayoutScheme(crs))._2
-          }
-        }
-        case _ => {
-          output.rasterSize match {
-            case Some(rs) =>
-              bandsQuery.reproject(ZoomedLayoutScheme(md.crs, rs))._2
-            case _ =>
-              bandsQuery.reproject(ZoomedLayoutScheme(md.crs))._2
-          }
-        }
+      val reprojectedRdd = output.rasterSize match {
+        case Some(rs) =>
+          bandsQuery.reproject(ZoomedLayoutScheme(crs, rs))._2
+        case _ =>
+          bandsQuery.reproject(ZoomedLayoutScheme(crs))._2
       }
-
-      val crs = reprojectedRdd.metadata.crs
 
       reprojectedRdd.map { case (key, tile) =>
         (key, GeoTiff(tile, md.mapTransform(key), crs))
@@ -114,7 +91,7 @@ object Export extends SparkJob with LazyLogging {
     * @param args Arguments to be parsed by the tooling defined in [[CommandLine]]
     */
   def main(args: Array[String]): Unit = {
-    val params = CommandLine.parser.parse(args, Export.Params()) match {
+    val params = CommandLine.parser.parse(args, CommandLine.Params()) match {
       case Some(params) =>
         params
       case None =>
