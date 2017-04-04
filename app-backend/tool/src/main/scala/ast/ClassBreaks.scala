@@ -10,13 +10,19 @@ import spire.syntax.order._
 
 case class ClassBreaks(
   classMap: Map[Double, Int],
-  boundaryType: ClassBoundaryType = LessThanOrEqualTo,
-  ndValue: Int = NODATA,
-  fallback: Int = NODATA
+  options: ClassBreaks.Options = ClassBreaks.Options()
 ) {
   lazy val mapStrategy =
-    new MapStrategy(boundaryType, ndValue, fallback, false)
+    new MapStrategy(options.boundaryType, options.ndValue, options.fallback, false)
 
   def toBreakMap =
     new BreakMap(classMap, mapStrategy, { i: Double => isNoData(i) })
+}
+
+object ClassBreaks {
+  case class Options(
+    boundaryType: ClassBoundaryType = LessThanOrEqualTo,
+    ndValue: Int = NODATA,
+    fallback: Int = NODATA
+  )
 }
