@@ -17,6 +17,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import spray.json._
 
+import java.util.UUID
+
 object Export extends SparkJob with LazyLogging {
   // Functions for combine step
   def createTiles(tile: MultibandGeoTiff): Seq[MultibandGeoTiff]                                       = Seq(tile)
@@ -41,7 +43,7 @@ object Export extends SparkJob with LazyLogging {
   def exportProject(params: CommandLine.Params)(exportDefinition: ExportDefinition)(implicit @transient sc: SparkContext) = {
     val wrappedConfiguration = HadoopConfiguration(S3.setCredentials(sc.hadoopConfiguration))
     val (input, output) = exportDefinition.input -> exportDefinition.output
-    input.layers.map { ld =>
+    val rdds = input.layers.map { ld =>
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
@@ -61,27 +63,46 @@ object Export extends SparkJob with LazyLogging {
         }
       }
 
-      val reprojectedRdd = output.rasterSize match {
+      output.rasterSize match {
         case Some(rs) =>
           bandsQuery.reproject(ZoomedLayoutScheme(crs, rs))._2
         case _ =>
           bandsQuery.reproject(ZoomedLayoutScheme(crs))._2
       }
+    }
 
-      reprojectedRdd.map { case (key, tile) =>
-        (key, GeoTiff(tile, md.mapTransform(key), crs))
+    if(!output.stitch) {
+      val result =
+        rdds.map { rdd =>
+          val md = rdd.metadata
+          rdd.map { case (key, tile) =>
+            (key, GeoTiff(tile, md.mapTransform(key), md.crs))
+          }
+        }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key, seq) =>
+          val head = seq.head
+          key -> GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
+        }
+
+      result.foreachPartition { iter =>
+        val configuration = wrappedConfiguration.get
+        iter.foreach { case (key, tile) =>
+          tile.write(
+            new Path(s"${output.source.toString}/${input.resolution}-${key.col}-${key.row}.tiff"),
+            configuration
+          )
+        }
       }
-    }.reduce(_ union _).combineByKey(createTiles, mergeTiles1, mergeTiles2).map { case (key, seq) =>
-      val head = seq.head
-      key -> GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
-    }.foreachPartition { iter =>
-      val configuration = wrappedConfiguration.get
-      iter.foreach { case (key, tile) =>
-        tile.write(
-          new Path(s"${output.source.toString}/${input.resolution}-${key.col}-${key.row}.tiff"),
-          configuration
-        )
-      }
+    } else {
+      val md = rdds.map(_.metadata).reduce(_ combine _)
+      val tile = ContextRDD(rdds.reduce((f, s) => f.withContext { _.union(s) }), md).stitch
+      val raster =
+        if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope))
+        else tile
+
+      GeoTiff(raster, md.crs).write(
+        new Path(s"${output.source.toString}/${input.resolution}-${UUID.randomUUID()}.tiff"),
+        wrappedConfiguration.get
+      )
     }
   }
 
