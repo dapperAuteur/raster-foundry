@@ -18,9 +18,9 @@ case class AOI(
   id: UUID,
   createdAt: Timestamp,
   modifiedAt: Timestamp,
-  organizationId: UUID,
-  createdBy: String,
-  modifiedBy: String,
+//  organizationId: UUID,
+//  createdBy: String,
+//  modifiedBy: String,
 
   /* Unique fields */
   area: MultiPolygon
@@ -35,11 +35,11 @@ object AOI {
 
   def create = Create.apply _
 
-  case class Create(organizationId: UUID, area: MultiPolygon) {
+  case class Create(area: MultiPolygon) {
     def toAOI(userId: String): AOI = {
       val now = new Timestamp((new java.util.Date()).getTime)
 
-      AOI(UUID.randomUUID, now, now, organizationId, userId, userId, area)
+      AOI(UUID.randomUUID, now, now, area)
     }
   }
 }
