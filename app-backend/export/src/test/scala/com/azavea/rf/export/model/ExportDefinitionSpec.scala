@@ -69,7 +69,7 @@ class ExportDefinitionSpec extends FunSpec with Matchers {
       output = OutputDefinition(
         crs = Some(CRS.fromEpsgCode(32654)),
         rasterSize = Some(256),
-        render = Some(Render(operation = "id", bands = Array(1, 2, 3))),
+        render = Some(Render(operation = "id", bands = Some(Array(1, 2, 3)))),
         crop = false,
         stitch = false,
         source = new URI("s3://test/")

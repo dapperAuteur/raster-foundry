@@ -3,6 +3,7 @@ package com.azavea.rf.export
 import com.azavea.rf.export.model._
 import com.azavea.rf.export.util._
 
+import geotrellis.proj4.LatLng
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff.{GeoTiff, MultibandGeoTiff}
 import geotrellis.spark._
@@ -18,6 +19,7 @@ import org.apache.spark._
 import spray.json._
 
 import java.util.UUID
+
 
 object Export extends SparkJob with LazyLogging {
   /** Get a LayerReader and an attribute store for the catalog located at the provided URI
@@ -46,12 +48,12 @@ object Export extends SparkJob with LazyLogging {
 
       val query = {
         val q = reader.query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
-        input.mask.fold(q)(mp => q.where(Intersects(mp)))
+        input.mask.fold(q)(mp => q.where(Intersects(mp.reproject(LatLng, md.crs))))
       } result
 
       val bandsQuery = query.withContext {
         _.mapValues { tile =>
-          output.render.map(_.bands.toSeq) match {
+          output.render.flatMap(_.bands.map(_.toSeq)) match {
             case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
             case _ => tile
           }
@@ -101,7 +103,7 @@ object Export extends SparkJob with LazyLogging {
             .mapValues { _.reduce(_ merge _) }, md
         ).stitch
       val raster =
-        if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope))
+        if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope.reproject(LatLng, md.crs)))
         else tile
 
       GeoTiff(raster, md.crs).write(
