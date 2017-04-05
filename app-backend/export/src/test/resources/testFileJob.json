@@ -13,8 +13,8 @@
     },
     "output":{
         "source":"file:///tmp",
-        "stitch":false,
-        "crop":false,
+        "stitch":true,
+        "crop":true,
         "render":{
             "operation":"id",
             "bands":[0, 1, 2]

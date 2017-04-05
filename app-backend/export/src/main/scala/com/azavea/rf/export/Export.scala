@@ -46,7 +46,7 @@ object Export extends SparkJob with LazyLogging {
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
-      val hist = attributeStore.read[Array[Histogram[Double]]](LayerId(layerId.toString, 0), "histogram")
+      val hist = attributeStore.read[Array[Histogram[Double]]](layerId.copy(zoom = 0), "histogram")
       val crs = output.crs.getOrElse(md.crs)
 
       val query = {
@@ -102,12 +102,11 @@ object Export extends SparkJob with LazyLogging {
     } else {
       val md = rdds.map(_.metadata).reduce(_ combine _)
       val tile =
-        ContextRDD(
-          rdds
-            .reduce((f, s) => f.withContext { _.union(s) })
-            .combineByKey(createTiles[MultibandTile], mergeTiles1[MultibandTile], mergeTiles2[MultibandTile])
-            .mapValues { _.reduce(_ merge _) }, md
-        ).stitch
+        rdds
+          .foldLeft(ContextRDD(sc.emptyRDD[(SpatialKey, MultibandTile)], md))((acc, r) => acc.withContext { _.union(r) })
+          .withContext { _.combineByKey(createTiles[MultibandTile], mergeTiles1[MultibandTile], mergeTiles2[MultibandTile]) }
+          .withContext { _.mapValues { _.reduce(_ merge _) } }
+          .stitch
       val raster =
         if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope.reproject(LatLng, md.crs)))
         else tile
