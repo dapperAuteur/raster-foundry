@@ -5,6 +5,8 @@ import com.azavea.rf.export.util._
 
 import geotrellis.proj4.LatLng
 import geotrellis.raster._
+import geotrellis.raster.io._
+import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.io.geotiff.{GeoTiff, MultibandGeoTiff}
 import geotrellis.spark._
 import geotrellis.spark.io._
@@ -17,9 +19,9 @@ import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 import java.util.UUID
-
 
 object Export extends SparkJob with LazyLogging {
   /** Get a LayerReader and an attribute store for the catalog located at the provided URI
@@ -44,6 +46,7 @@ object Export extends SparkJob with LazyLogging {
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
+      val hist = attributeStore.read[Array[Histogram[Double]]](LayerId(layerId.toString, 0), "histogram")
       val crs = output.crs.getOrElse(md.crs)
 
       val query = {
@@ -53,10 +56,13 @@ object Export extends SparkJob with LazyLogging {
 
       val bandsQuery = query.withContext {
         _.mapValues { tile =>
-          output.render.flatMap(_.bands.map(_.toSeq)) match {
-            case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
-            case _ => tile
-          }
+          val subtile =
+            output.render.flatMap(_.bands.map(_.toSeq)) match {
+              case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
+              case _ => tile
+            }
+
+          ld.colorCorrections.map(_.colorCorrect(subtile, hist)).getOrElse(subtile)
         }
       }
 

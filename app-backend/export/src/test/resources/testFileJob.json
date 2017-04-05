@@ -7,8 +7,7 @@
         "layers":[
             {
                 "layerId":"ca10532c-0432-4bb2-9d89-9ab8ba4b7e51",
-                "ingestLocation":"s3://rasterfoundry-staging-catalogs-us-east-1/layers",
-                "attributes":[ ]
+                "ingestLocation":"s3://rasterfoundry-staging-catalogs-us-east-1/layers"
             }
         ]
     },
