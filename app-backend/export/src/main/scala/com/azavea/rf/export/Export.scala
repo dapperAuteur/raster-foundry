@@ -20,6 +20,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
+import cats.implicits._
 
 import java.util.UUID
 
@@ -46,7 +47,7 @@ object Export extends SparkJob with LazyLogging {
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
-      lazy val hist = attributeStore.read[Array[Histogram[Double]]](layerId.copy(zoom = 0), "histogram")
+      val hist = ld.colorCorrections.map { _ => attributeStore.read[Array[Histogram[Double]]](LayerId(layerId.name, 0), "histogram") }
       val crs = output.crs.getOrElse(md.crs)
 
       val query = {
@@ -62,7 +63,7 @@ object Export extends SparkJob with LazyLogging {
               case _ => tile
             }
 
-          ld.colorCorrections.map(_.colorCorrect(subtile, hist)).getOrElse(subtile)
+          (ld.colorCorrections |@| hist) map { _.colorCorrect(subtile, _) } getOrElse subtile
         }
       }
 
