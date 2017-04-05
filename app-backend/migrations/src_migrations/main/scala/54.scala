@@ -12,7 +12,8 @@ CREATE TABLE aois (
   organization_id UUID REFERENCES organizations(id) NOT NULL,
   created_by VARCHAR(255) REFERENCES users(id) NOT NULL,
   modified_by VARCHAR(255) REFERENCES users(id) NOT NULL,
-  area geometry(MultiPolygon, 3857) NOT NULL
+  area geometry(MultiPolygon, 3857) NOT NULL,
+  filters JSONB NOT NULL
 );
 """,
 
