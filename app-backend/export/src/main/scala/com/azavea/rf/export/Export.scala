@@ -57,13 +57,12 @@ object Export extends SparkJob with LazyLogging {
 
       val bandsQuery = query.withContext {
         _.mapValues { tile =>
-          val subtile =
-            output.render.flatMap(_.bands.map(_.toSeq)) match {
-              case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
-              case _ => tile
-            }
+          val ctile = (ld.colorCorrections |@| hist) map { _.colorCorrect(tile, _) } getOrElse tile
 
-          (ld.colorCorrections |@| hist) map { _.colorCorrect(subtile, _) } getOrElse subtile
+          output.render.flatMap(_.bands.map(_.toSeq)) match {
+            case Some(seq) if seq.nonEmpty => ctile.subsetBands(seq)
+            case _ => ctile
+          }
         }
       }
 

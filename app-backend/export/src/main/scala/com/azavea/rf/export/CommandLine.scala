@@ -20,12 +20,6 @@ object CommandLine {
 
     head("raster-foundry-export", "0.1")
 
-    opt[Unit]('t', "test").action( (_, conf) =>
-      conf.copy(testRun = true) ).text("Run this job as a test - verify output")
-
-    opt[Unit]("overwrite").action( (_, conf) =>
-      conf.copy(overwrite = true) ).text("Overwrite conflicting layers")
-
     opt[URI]('j',"jobDefinition")
       .action( (jd, conf) => conf.copy(jobDefinition = jd) )
       .text("The location of the json which defines an ingest job")
