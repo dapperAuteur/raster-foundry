@@ -358,7 +358,7 @@ paths:
         200:
           description: AWS credentials scoped to the upload bucket with prefix
           schema:
-            $ref: '#/definitions/UploadCredentials'
+            $ref: '#/definitions/UploadCredentialsResponse'
         default:
           description: Unexpected error
           schema:
@@ -716,6 +716,24 @@ paths:
           description: An ordered list of scene IDs and corresponding color correction parameters
           schema:
             $ref: '#/definitions/MosaicDefinition'
+
+  /projects/{uuid}/mosaic/bulk-update-color-corrections/:
+    post:
+      summary: Persist a batch of project/scene pairing\'s color correction parameters
+      tags:
+        - Imagery
+      parameters:
+        - $ref: '#/parameters/uuid'
+        - name: combinedSceneCorrectionParameters
+          description: Combined color correction parameters
+          in: body
+          schema:
+            $ref: '#/definitions/CombinedSceneCorrectionParams'
+      responses:
+        200:
+          description: Successfully updated all scenes' color correction parameters
+        
+      
   /projects/{uuid}/mosaic/{uuid2}:
     get:
       summary: A project/scene pairing\'s persisted color correction parameters
@@ -2346,6 +2364,8 @@ definitions:
           - QUEUED
           - PROCESSING
           - COMPLETE
+          - FAILED
+          - ABORTED
       files:
         type: array
         items:
@@ -2367,7 +2387,13 @@ definitions:
         type: string
         description: datasource of tiffs being uploaded
         format: uuid
-
+      visibility:
+        type: string
+        description: Level of restriction on viewing
+        enum:
+          - PUBLIC
+          - ORGANIZATION
+          - PRIVATE
   Upload:
     allOf:
     - $ref: '#/definitions/BaseModel'
@@ -2393,15 +2419,22 @@ definitions:
   UploadCredentials:
     type: object
     properties:
-      accessKey:
+      AccessKeyId:
         type: string
-      secretAccessKey:
+      SecretAccessKey:
          type: string
-      sessionToken:
+      SessionToken:
         type: string
-      expiration:
+      Expiration:
         type: string
         format: datetime
+  UploadCredentialsResponse:
+    type: object
+    properties:
+      credentials:
+        $ref: '#/definitions/UploadCredentials'
+      bucketPath:
+        type: string
   SceneParams:
     type: object
     description: scene params
@@ -2501,3 +2534,19 @@ definitions:
         $ref: '#/definitions/SceneParams'
       imageParams:
         $ref: '#/definitions/ImageParams'
+
+  SceneCorrectionParam:
+    type: object
+    description: A paired scene ID and color correction parameter list
+    properties:
+      sceneId:
+        type: string
+        format: uuid
+      params:
+        $ref: '#/definitions/ColorCorrection'
+          
+  CombinedSceneCorrectionParams:
+    type: array
+    description: Combined color correction parameters for multiple scenes
+    items:
+      $ref: '#/definitions/SceneCorrectionParam'

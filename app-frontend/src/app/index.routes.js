@@ -221,9 +221,6 @@ function browseStates($stateProvider) {
         'minAcquisitionDatetime',
         'maxAcquisitionDatetime',
         'datasource',
-        'month',
-        'minDayOfMonth',
-        'maxDayOfMonth',
         'maxSunAzimuth',
         'minSunAzimuth',
         'maxSunElevation',
@@ -371,8 +368,10 @@ function importStates($stateProvider) {
         });
 }
 
-function routeConfig($urlRouterProvider, $stateProvider) {
+function routeConfig($urlRouterProvider, $stateProvider, $urlMatcherFactoryProvider) {
     'ngInject';
+
+    $urlMatcherFactoryProvider.strictMode(false);
 
     $stateProvider.state('root', {
         templateUrl: rootTpl
@@ -397,7 +396,7 @@ function routeConfig($urlRouterProvider, $stateProvider) {
             controllerAs: '$ctrl'
         });
 
-    $urlRouterProvider.otherwise('/home/');
+    $urlRouterProvider.otherwise('/home');
 }
 
 

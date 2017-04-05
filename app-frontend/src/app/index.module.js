@@ -12,6 +12,7 @@ const App = angular.module(
         // plugins
         require('angular-ui-router'),
         require('angular-nvd3'),
+        'obDateRangePicker',
         'angular-jwt',
         'angular-clipboard',
         'auth0.lock',
@@ -24,6 +25,8 @@ const App = angular.module(
         'infinite-scroll',
         'ngResource',
         'oc.lazyLoad',
+        'angularLoad',
+        'tandibar/ng-rollbar',
 
         // core
         require('./core/core.module').name,
