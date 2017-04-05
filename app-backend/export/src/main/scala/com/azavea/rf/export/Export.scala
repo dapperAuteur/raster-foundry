@@ -5,6 +5,8 @@ import com.azavea.rf.export.util._
 
 import geotrellis.proj4.LatLng
 import geotrellis.raster._
+import geotrellis.raster.io._
+import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.io.geotiff.{GeoTiff, MultibandGeoTiff}
 import geotrellis.spark._
 import geotrellis.spark.io._
@@ -17,9 +19,10 @@ import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import spray.json._
+import spray.json.DefaultJsonProtocol._
+import cats.implicits._
 
 import java.util.UUID
-
 
 object Export extends SparkJob with LazyLogging {
   /** Get a LayerReader and an attribute store for the catalog located at the provided URI
@@ -44,6 +47,7 @@ object Export extends SparkJob with LazyLogging {
       val (reader, attributeStore) = getRfLayerManagement(ld)
       val layerId = LayerId(ld.layerId.toString, input.resolution)
       val md = attributeStore.readMetadata[TileLayerMetadata[SpatialKey]](layerId)
+      val hist = ld.colorCorrections.map { _ => attributeStore.read[Array[Histogram[Double]]](LayerId(layerId.name, 0), "histogram") }
       val crs = output.crs.getOrElse(md.crs)
 
       val query = {
@@ -53,9 +57,11 @@ object Export extends SparkJob with LazyLogging {
 
       val bandsQuery = query.withContext {
         _.mapValues { tile =>
+          val ctile = (ld.colorCorrections |@| hist) map { _.colorCorrect(tile, _) } getOrElse tile
+
           output.render.flatMap(_.bands.map(_.toSeq)) match {
-            case Some(seq) if seq.nonEmpty => tile.subsetBands(seq)
-            case _ => tile
+            case Some(seq) if seq.nonEmpty => ctile.subsetBands(seq)
+            case _ => ctile
           }
         }
       }
@@ -68,20 +74,21 @@ object Export extends SparkJob with LazyLogging {
       }
     }
 
+    /** Tile merge with respect to layer initial ordering */
     if(!output.stitch) {
       val result =
         rdds
-          .map { rdd =>
+          .zipWithIndex
+          .map { case (rdd, i) =>
             val md = rdd.metadata
-            rdd.map { case (key, tile) =>
-              (key, GeoTiff(tile, md.mapTransform(key), md.crs))
-            }
+            rdd.map { case (key, tile) => (key, i -> GeoTiff(tile, md.mapTransform(key), md.crs)) }
           }
           .reduce(_ union _)
-          .combineByKey(createTiles[MultibandGeoTiff], mergeTiles1[MultibandGeoTiff], mergeTiles2[MultibandGeoTiff])
+          .combineByKey(createTiles[(Int, MultibandGeoTiff)], mergeTiles1[(Int, MultibandGeoTiff)], mergeTiles2[(Int, MultibandGeoTiff)])
           .mapValues { seq =>
-            val head = seq.head
-            GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
+            val sorted = seq.sortBy(_._1).map(_._2)
+            val head = sorted.head
+            GeoTiff(sorted.map(_.tile).reduce(_ merge _), head.extent, head.crs)
           }
 
       result.foreachPartition { iter =>
@@ -96,12 +103,13 @@ object Export extends SparkJob with LazyLogging {
     } else {
       val md = rdds.map(_.metadata).reduce(_ combine _)
       val tile =
-        ContextRDD(
-          rdds
-            .reduce((f, s) => f.withContext { _.union(s) })
-            .combineByKey(createTiles[MultibandTile], mergeTiles1[MultibandTile], mergeTiles2[MultibandTile])
-            .mapValues { _.reduce(_ merge _) }, md
-        ).stitch
+        rdds
+          .zipWithIndex
+          .map { case (rdd, i) => rdd.mapValues { value => i -> value } }
+          .foldLeft(ContextRDD(sc.emptyRDD[(SpatialKey, (Int, MultibandTile))], md))((acc, r) => acc.withContext { _.union(r) })
+          .withContext { _.combineByKey(createTiles[(Int, MultibandTile)], mergeTiles1[(Int, MultibandTile)], mergeTiles2[(Int, MultibandTile)]) }
+          .withContext { _.mapValues { _.sortBy(_._1).map(_._2).reduce(_ merge _) } }
+          .stitch
       val raster =
         if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope.reproject(LatLng, md.crs)))
         else tile
