@@ -32,9 +32,6 @@ case class Project(
 /** Case class for project creation */
 object Project extends GeoJsonSupport {
 
-  /* One week, in milliseconds */
-  val DEFAULT_CADENCE: Long = 604800000
-
   def tupled = (Project.apply _).tupled
 
   def create = Create.apply _
@@ -75,7 +72,7 @@ object Project extends GeoJsonSupport {
         tileVisibility,
         isAOIProject,
         aoiCadence,
-        now,
+        new Timestamp(now.getTime - aoiCadence),
         tags
       )
     }
