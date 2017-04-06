@@ -74,20 +74,21 @@ object Export extends SparkJob with LazyLogging {
       }
     }
 
+    /** Tile merge with respect to layer initial ordering */
     if(!output.stitch) {
       val result =
         rdds
-          .map { rdd =>
+          .zipWithIndex
+          .map { case (rdd, i) =>
             val md = rdd.metadata
-            rdd.map { case (key, tile) =>
-              (key, GeoTiff(tile, md.mapTransform(key), md.crs))
-            }
+            rdd.map { case (key, tile) => (key, i -> GeoTiff(tile, md.mapTransform(key), md.crs)) }
           }
           .reduce(_ union _)
-          .combineByKey(createTiles[MultibandGeoTiff], mergeTiles1[MultibandGeoTiff], mergeTiles2[MultibandGeoTiff])
+          .combineByKey(createTiles[(Int, MultibandGeoTiff)], mergeTiles1[(Int, MultibandGeoTiff)], mergeTiles2[(Int, MultibandGeoTiff)])
           .mapValues { seq =>
-            val head = seq.head
-            GeoTiff(seq.map(_.tile).reduce(_ merge _), head.extent, head.crs)
+            val sorted = seq.sortBy(_._1).map(_._2)
+            val head = sorted.head
+            GeoTiff(sorted.map(_.tile).reduce(_ merge _), head.extent, head.crs)
           }
 
       result.foreachPartition { iter =>
@@ -103,9 +104,11 @@ object Export extends SparkJob with LazyLogging {
       val md = rdds.map(_.metadata).reduce(_ combine _)
       val tile =
         rdds
-          .foldLeft(ContextRDD(sc.emptyRDD[(SpatialKey, MultibandTile)], md))((acc, r) => acc.withContext { _.union(r) })
-          .withContext { _.combineByKey(createTiles[MultibandTile], mergeTiles1[MultibandTile], mergeTiles2[MultibandTile]) }
-          .withContext { _.mapValues { _.reduce(_ merge _) } }
+          .zipWithIndex
+          .map { case (rdd, i) => rdd.mapValues { value => i -> value } }
+          .foldLeft(ContextRDD(sc.emptyRDD[(SpatialKey, (Int, MultibandTile))], md))((acc, r) => acc.withContext { _.union(r) })
+          .withContext { _.combineByKey(createTiles[(Int, MultibandTile)], mergeTiles1[(Int, MultibandTile)], mergeTiles2[(Int, MultibandTile)]) }
+          .withContext { _.mapValues { _.sortBy(_._1).map(_._2).reduce(_ merge _) } }
           .stitch
       val raster =
         if(output.crop) input.mask.fold(tile)(mp => tile.crop(mp.envelope.reproject(LatLng, md.crs)))
