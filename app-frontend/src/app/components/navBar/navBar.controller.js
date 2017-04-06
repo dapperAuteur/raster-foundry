@@ -18,6 +18,10 @@ export default class NavBarController {
         this.projectService = projectService;
     }
 
+    isInProject() {
+        return Boolean(this.projectService.currentProject);
+    }
+
     $onInit() {
         this.optionsOpen = false;
         this.assetLogo = assetLogo;
