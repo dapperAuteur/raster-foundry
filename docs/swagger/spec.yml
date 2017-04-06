@@ -591,6 +591,31 @@ paths:
           description: The UUID parameter does not refer to a project or the user does not have access to the project it refers to
           schema:
             $ref: '#/definitions/Error'
+
+  /projects/{uuid}/aoi/:
+    get:
+      summary: Get all Areas of Interest for this project.
+      parameters:
+        - $ref: '#/parameters/uuid'
+      responses:
+        200:
+          description: Json summary of the filters and Polygons that make up AOIs for the given project.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/AOI'
+
+    post:
+      summary: Create an Area of Interest for this project.
+      tags:
+        - Imagery
+      parameters:
+        - name: aoi
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/AOI'
+
   /projects/{uuid}/scenes/:
     get:
       summary: Get a list of scenes associated with this project
@@ -731,9 +756,9 @@ paths:
             $ref: '#/definitions/CombinedSceneCorrectionParams'
       responses:
         200:
-          description: Successfully updated all scenes' color correction parameters
-        
-      
+          description: "Successfully updated all scenes' color correction parameters"
+
+
   /projects/{uuid}/mosaic/{uuid2}:
     get:
       summary: A project/scene pairing\'s persisted color correction parameters
@@ -783,6 +808,52 @@ paths:
       responses:
         204:
           description: Successfully updated order of scenes in project
+
+  /aoi/{uuid}/:
+    get:
+      summary: Get a requested Area of Interest.
+      parameters:
+        - $ref: '#/parameters/uuid'
+      responses:
+        200:
+          description: "Json summary of the given AOI's filters and Polygons."
+          schema:
+            $ref: '#/definition/AOI'
+
+    put:
+      summary: Update an Area of Interest.
+      tags:
+      parameters:
+        - $ref: '#/parameters/uuid'
+        - name: aoi
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/AOI'
+      responses:
+        204:
+          description: Update successful.
+        404:
+          description: The UUID parameter does not refer to a project or the user does not have access to the project it refers to.
+          schema:
+            $ref: '#/definitions/Error'
+        default:
+          description: Unexpected error.
+          schema: '#/definitions/Error'
+
+    delete:
+      summary: Delete a project.
+      tags:
+        - Imagery
+      parameters:
+        - $ref: '#/parameters/uuid'
+      responses:
+        204:
+          description: Deletion successful.
+        404:
+          descripiton: The UUID parameter does not refer to a project or the user does not have access to the project it refers to.
+          schema: '#/definitions/Error'
+
   /map-tokens/:
     get:
       summary: Get a list of map tokens
@@ -1646,6 +1717,14 @@ definitions:
         format: uuid
       colorCorrection:
         $ref: '#/definitions/ColorCorrection'
+  AOI:
+    type: object
+    properties:
+      organizationId:
+        type: string
+        format: uuid
+      area:
+        type: object
   ColorCorrection:
     type: object
     properties:
@@ -2544,7 +2623,7 @@ definitions:
         format: uuid
       params:
         $ref: '#/definitions/ColorCorrection'
-          
+
   CombinedSceneCorrectionParams:
     type: array
     description: Combined color correction parameters for multiple scenes
