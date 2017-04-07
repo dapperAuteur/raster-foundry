@@ -1725,6 +1725,10 @@ definitions:
         format: uuid
       area:
         type: object
+      filters:
+        type: object
+        schema:
+          $ref: '#/definitions/CombinedSceneQueryParams'
   ColorCorrection:
     type: object
     properties:
