@@ -65,15 +65,15 @@ object ToolTags extends TableQuery(tag => new ToolTags(tag)) with LazyLogging {
     *
     * @param pageRequest PageRequest information about sorting and page size
     */
-  def listToolTags(pageRequest: PageRequest)
+  def listToolTags(pageRequest: PageRequest, user: User)
                    (implicit database: DB): Future[PaginatedResponse[ToolTag]] = {
     val toolTagQueryResult = database.db.run {
-      val action = ToolTags.page(pageRequest).result
+      val action = ToolTags.page(pageRequest, user).result
       logger.debug(s"Paginated Query for tool tags -- SQL: ${action.statements.headOption}")
       action
     }
     val totalToolTagsQueryResult = database.db.run {
-      val action = ToolTags.length.result
+      val action = ToolTags.filterToSharedOrganizationIfNotInRoot(user).length.result
       logger.debug(s"Total Query for tool tags -- SQL: ${action.statements.headOption}")
       action
     }
@@ -115,9 +115,14 @@ object ToolTags extends TableQuery(tag => new ToolTags(tag)) with LazyLogging {
   /** Given a tool tag ID, attempt to retrieve it from the database
     *
     * @param toolTagId UUID ID of tool tag to get from database
+    * @param user      Results will be limited to user's organization
     */
-  def getToolTag(toolTagId: UUID)(implicit database: DB): Future[Option[ToolTag]] = {
-    val fetchAction = ToolTags.filter(_.id === toolTagId).result.headOption
+  def getToolTag(toolTagId: UUID, user: User)(implicit database: DB): Future[Option[ToolTag]] = {
+    val fetchAction = ToolTags
+                        .filterToSharedOrganizationIfNotInRoot(user)
+                        .filter(_.id === toolTagId)
+                        .result
+                        .headOption
 
     database.db.run {
       fetchAction
@@ -127,10 +132,14 @@ object ToolTags extends TableQuery(tag => new ToolTags(tag)) with LazyLogging {
   /** Delete a given tool tag
     *
     * @param toolTagId UUID ID of tool tag to delete
+    * @param user      Results will be limited to user's organization
     */
-  def deleteToolTag(toolTagId: UUID)(implicit database: DB): Future[Int] = {
+  def deleteToolTag(toolTagId: UUID, user: User)(implicit database: DB): Future[Int] = {
     database.db.run {
-      ToolTags.filter(_.id === toolTagId).delete
+      ToolTags
+        .filterToSharedOrganizationIfNotInRoot(user)
+        .filter(_.id === toolTagId)
+        .delete
     }
   }
 
@@ -148,7 +157,9 @@ object ToolTags extends TableQuery(tag => new ToolTags(tag)) with LazyLogging {
     val updateTime = new Timestamp((new java.util.Date).getTime)
 
     val updateToolTagQuery = for {
-      updateToolTag <- ToolTags.filter(_.id === toolTagId)
+      updateToolTag <- ToolTags
+                         .filterToSharedOrganizationIfNotInRoot(user)
+                         .filter(_.id === toolTagId)
     } yield (updateToolTag.modifiedAt, updateToolTag.modifiedBy, updateToolTag.tag)
 
     database.db.run {
@@ -161,8 +172,9 @@ object ToolTags extends TableQuery(tag => new ToolTags(tag)) with LazyLogging {
 }
 
 class ToolTagsTableQuery[M, U, C[_]](toolTags: ToolTags.TableQuery) {
-  def page(pageRequest: PageRequest): ToolTags.TableQuery = {
+  def page(pageRequest: PageRequest, user: User): ToolTags.TableQuery = {
     ToolTags
+      .filterToSharedOrganizationIfNotInRoot(user)
       .drop(pageRequest.offset * pageRequest.limit)
       .take(pageRequest.limit)
   }

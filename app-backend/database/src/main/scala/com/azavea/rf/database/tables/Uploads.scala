@@ -65,16 +65,17 @@ object Uploads extends TableQuery(tag => new Uploads(tag)) with LazyLogging {
     * @param limit Int limit of objects per page
     * @param queryParams UploadQueryparameters query parameters for request
     */
-  def listUploads(offset: Int, limit: Int, queryParams: UploadQueryParameters) = {
+  def listUploads(offset: Int, limit: Int, queryParams: UploadQueryParameters, user: User) = {
 
     val dropRecords = limit * offset
+    val accessibleUploads = Uploads.filterToSharedOrganizationIfNotInRoot(user)
     ListQueryResult[Upload](
-      (Uploads
+      (accessibleUploads
          .filterByUploadParams(queryParams)
          .drop(dropRecords)
          .take(limit)
          .result):DBIO[Seq[Upload]],
-      Uploads.length.result
+      accessibleUploads.length.result
     )
   }
 
@@ -92,16 +93,25 @@ object Uploads extends TableQuery(tag => new Uploads(tag)) with LazyLogging {
   /** Given a upload ID, attempt to retrieve it from the database
     *
     * @param uploadId UUID ID of upload to get from database
+    * @param user     Results will be limited to user's organization
     */
-  def getUpload(uploadId: UUID) =
-    Uploads.filter(_.id === uploadId).result.headOption
+  def getUpload(uploadId: UUID, user: User) =
+    Uploads
+      .filterToSharedOrganizationIfNotInRoot(user)
+      .filter(_.id === uploadId)
+      .result
+      .headOption
 
   /** Given a upload ID, attempt to remove it from the database
     *
     * @param uploadId UUID ID of upload to remove
+    * @param user     Results will be limited to user's organization
     */
-  def deleteUpload(uploadId: UUID) =
-    Uploads.filter(_.id === uploadId).delete
+  def deleteUpload(uploadId: UUID, user: User) =
+    Uploads
+      .filterToSharedOrganizationIfNotInRoot(user)
+      .filter(_.id === uploadId)
+      .delete
 
 /** Update a upload @param upload Upload to use for update
     * @param uploadId UUID of upload to update
@@ -111,7 +121,9 @@ object Uploads extends TableQuery(tag => new Uploads(tag)) with LazyLogging {
     val updateTime = new Timestamp((new java.util.Date).getTime)
 
     val updateUploadQuery = for {
-      updateUpload <- Uploads.filter(_.id === uploadId)
+      updateUpload <- Uploads
+                        .filterToSharedOrganizationIfNotInRoot(user)
+                        .filter(_.id === uploadId)
     } yield (
       updateUpload.modifiedAt,
       updateUpload.modifiedBy,

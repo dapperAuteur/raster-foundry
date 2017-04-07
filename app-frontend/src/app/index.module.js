@@ -15,7 +15,6 @@ const App = angular.module(
         'obDateRangePicker',
         'angular-jwt',
         'angular-clipboard',
-        'auth0.lock',
         'ngAnimate',
         'ngCookies',
         'ngTouch',
@@ -27,6 +26,7 @@ const App = angular.module(
         'oc.lazyLoad',
         'angularLoad',
         'tandibar/ng-rollbar',
+        'angular.filter',
 
         // core
         require('./core/core.module').name,

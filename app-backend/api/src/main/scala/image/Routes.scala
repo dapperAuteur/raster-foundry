@@ -1,6 +1,6 @@
 package com.azavea.rf.api.image
 
-import com.azavea.rf.common.{Authentication, UserErrorHandler}
+import com.azavea.rf.common.{Authentication, UserErrorHandler, CommonHandlers}
 import com.azavea.rf.database.tables.Images
 import com.azavea.rf.database.Database
 import com.azavea.rf.datamodel._
@@ -22,6 +22,7 @@ import de.heikoseeberger.akkahttpcirce.CirceSupport
 trait ImageRoutes extends Authentication
     with ImageQueryParametersDirective
     with PaginationDirectives
+    with CommonHandlers
     with UserErrorHandler
     with CirceSupport {
 
@@ -50,8 +51,10 @@ trait ImageRoutes extends Authentication
 
   def createImage: Route = authenticate { user =>
     entity(as[Image.Banded]) { newImage =>
-      onSuccess(Images.insertImage(newImage, user)) { image =>
-        complete(image)
+      authorize(user.isInRootOrSameOrganizationAs(newImage)) {
+        onSuccess(Images.insertImage(newImage, user)) { image =>
+          complete(image)
+        }
       }
     }
   }
@@ -60,7 +63,7 @@ trait ImageRoutes extends Authentication
     get {
       rejectEmptyResponse {
         complete {
-          Images.getImage(imageId)
+          Images.getImage(imageId, user)
         }
       }
     }
@@ -68,19 +71,17 @@ trait ImageRoutes extends Authentication
 
   def updateImage(imageId: UUID): Route = authenticate { user =>
     entity(as[Image.WithRelated]) { updatedImage =>
-      onSuccess(Images.updateImage(updatedImage, imageId, user)) { count =>
-        complete(StatusCodes.NoContent)
+      authorize(user.isInRootOrSameOrganizationAs(updatedImage)) {
+        onSuccess(Images.updateImage(updatedImage, imageId, user)) {
+          completeSingleOrNotFound
+        }
       }
     }
   }
 
   def deleteImage(imageId: UUID): Route = authenticate { user =>
-    onSuccess(Images.deleteImage(imageId)) {
-      case 1 => complete(StatusCodes.NoContent)
-      case 0 => complete(StatusCodes.NotFound)
-      case count => throw new IllegalStateException(
-        s"Error deleting image: delete result expected to be 1, was $count"
-      )
+    onSuccess(Images.deleteImage(imageId, user)) {
+      completeSingleOrNotFound
     }
   }
 }

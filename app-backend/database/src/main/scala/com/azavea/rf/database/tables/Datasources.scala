@@ -61,12 +61,13 @@ object Datasources extends TableQuery(tag => new Datasources(tag)) with LazyLogg
     *
     * @param pageRequest PageRequest information about sorting and page size
     */
-  def listDatasources(offset: Int, limit: Int, datasourceParams: DatasourceQueryParameters) = {
+  def listDatasources(offset: Int, limit: Int, datasourceParams: DatasourceQueryParameters, user: User) = {
 
     val dropRecords = limit * offset
+    val accessibleDatasources = Datasources.filterToSharedOrganizationIfNotInRoot(user)
     val datasourceFilterQuery = datasourceParams.name match {
-      case Some(n) => Datasources.filter(_.name === n)
-      case _ => Datasources
+      case Some(n) => accessibleDatasources.filter(_.name === n)
+      case _ => accessibleDatasources
     }
 
     ListQueryResult[Datasource](
@@ -92,16 +93,25 @@ object Datasources extends TableQuery(tag => new Datasources(tag)) with LazyLogg
   /** Given a datasource ID, attempt to retrieve it from the database
     *
     * @param datasourceId UUID ID of datasource to get from database
+    * @param user         Results will be limited to user's organization
     */
-  def getDatasource(datasourceId: UUID) =
-    Datasources.filter(_.id === datasourceId).result.headOption
+  def getDatasource(datasourceId: UUID, user: User) =
+    Datasources
+      .filterToSharedOrganizationIfNotInRoot(user)
+      .filter(_.id === datasourceId)
+      .result
+      .headOption
 
   /** Given a datasource ID, attempt to remove it from the database
     *
     * @param datasourceId UUID ID of datasource to remove
+    * @param user         Results will be limited to user's organization
     */
-  def deleteDatasource(datasourceId: UUID) =
-    Datasources.filter(_.id === datasourceId).delete
+  def deleteDatasource(datasourceId: UUID, user: User) =
+    Datasources
+      .filterToSharedOrganizationIfNotInRoot(user)
+      .filter(_.id === datasourceId)
+      .delete
 
 /** Update a datasource @param datasource Datasource to use for update
     * @param datasourceId UUID of datasource to update
@@ -111,7 +121,9 @@ object Datasources extends TableQuery(tag => new Datasources(tag)) with LazyLogg
     val updateTime = new Timestamp((new java.util.Date).getTime)
 
     val updateDatasourceQuery = for {
-      updateDatasource <- Datasources.filter(_.id === datasourceId)
+      updateDatasource <- Datasources
+                            .filterToSharedOrganizationIfNotInRoot(user)
+                            .filter(_.id === datasourceId)
     } yield (
       updateDatasource.modifiedAt,
       updateDatasource.modifiedBy,

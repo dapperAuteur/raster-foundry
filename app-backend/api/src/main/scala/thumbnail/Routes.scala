@@ -1,6 +1,6 @@
 package com.azavea.rf.api.thumbnail
 
-import com.azavea.rf.common.{UserErrorHandler, Authentication, S3}
+import com.azavea.rf.common.{UserErrorHandler, Authentication, S3, CommonHandlers}
 import com.azavea.rf.database.tables.Thumbnails
 import com.azavea.rf.database.Database
 import com.azavea.rf.datamodel._
@@ -23,6 +23,7 @@ import scala.util.{Success, Failure, Try}
 trait ThumbnailRoutes extends Authentication
     with ThumbnailQueryParameterDirective
     with PaginationDirectives
+    with CommonHandlers
     with UserErrorHandler
     with Config {
 
@@ -58,15 +59,17 @@ trait ThumbnailRoutes extends Authentication
   def listThumbnails: Route = authenticate { user =>
     (withPagination & thumbnailSpecificQueryParameters) { (page, thumbnailParams) =>
       complete {
-        Thumbnails.listThumbnails(page, thumbnailParams)
+        Thumbnails.listThumbnails(page, thumbnailParams, user)
       }
     }
   }
 
   def createThumbnail: Route = authenticate { user =>
     entity(as[Thumbnail.Create]) { newThumbnail =>
-      onSuccess(Thumbnails.insertThumbnail(newThumbnail.toThumbnail)) { thumbnail =>
-        complete(StatusCodes.Created, thumbnail)
+      authorize(user.isInRootOrSameOrganizationAs(newThumbnail)) {
+        onSuccess(Thumbnails.insertThumbnail(newThumbnail.toThumbnail)) { thumbnail =>
+          complete(StatusCodes.Created, thumbnail)
+        }
       }
     }
   }
@@ -75,7 +78,7 @@ trait ThumbnailRoutes extends Authentication
     withPagination { page =>
       rejectEmptyResponse {
         complete {
-          Thumbnails.getThumbnail(thumbnailId)
+          Thumbnails.getThumbnail(thumbnailId, user)
         }
       }
     }
@@ -97,23 +100,17 @@ trait ThumbnailRoutes extends Authentication
 
   def updateThumbnail(thumbnailId: UUID): Route = authenticate { user =>
     entity(as[Thumbnail]) { updatedThumbnail =>
-      onSuccess(Thumbnails.updateThumbnail(updatedThumbnail, thumbnailId)) {
-        case 1 => complete(StatusCodes.NoContent)
-        case 0 => complete(StatusCodes.NotFound)
-        case count => throw new IllegalStateException(
-          s"Error updating thumbnail: update result expected to be 1, was $count"
-        )
+      authorize(user.isInRootOrSameOrganizationAs(updatedThumbnail)) {
+        onSuccess(Thumbnails.updateThumbnail(updatedThumbnail, thumbnailId, user)) {
+          completeSingleOrNotFound
+        }
       }
     }
   }
 
   def deleteThumbnail(thumbnailId: UUID): Route = authenticate { user =>
-    onSuccess(Thumbnails.deleteThumbnail(thumbnailId)) {
-      case 1 => complete(StatusCodes.NoContent)
-      case 0 => complete(StatusCodes.NotFound)
-      case count => throw new IllegalStateException(
-        s"Error deleting thumbnail: delete result expected to be 1, was $count"
-      )
+    onSuccess(Thumbnails.deleteThumbnail(thumbnailId, user)) {
+      completeSingleOrNotFound
     }
   }
 }

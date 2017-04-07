@@ -9,7 +9,7 @@ import akka.http.scaladsl.model.StatusCodes
 
 import com.lonelyplanet.akka.http.extensions.{PaginationDirectives, PageRequest}
 
-import com.azavea.rf.common.{Authentication, UserErrorHandler}
+import com.azavea.rf.common.{Authentication, UserErrorHandler, CommonHandlers}
 import com.azavea.rf.database.tables.Uploads
 import com.azavea.rf.database.query._
 import com.azavea.rf.database.{Database, ActionRunner}
@@ -21,6 +21,7 @@ import de.heikoseeberger.akkahttpcirce.CirceSupport._
 trait UploadRoutes extends Authentication
     with UploadQueryParameterDirective
     with PaginationDirectives
+    with CommonHandlers
     with UserErrorHandler
     with ActionRunner {
   implicit def database: Database
@@ -48,7 +49,7 @@ trait UploadRoutes extends Authentication
     (withPagination & uploadQueryParams) {
       (page: PageRequest, queryParams: UploadQueryParameters) =>
       complete {
-        list[Upload](Uploads.listUploads(page.offset, page.limit, queryParams),
+        list[Upload](Uploads.listUploads(page.offset, page.limit, queryParams, user),
           page.offset, page.limit)
       }
     }
@@ -57,40 +58,40 @@ trait UploadRoutes extends Authentication
   def getUpload(uploadId: UUID): Route = authenticate { user =>
     rejectEmptyResponse {
       complete {
-        readOne[Upload](Uploads.getUpload(uploadId))
+        readOne[Upload](Uploads.getUpload(uploadId, user))
       }
     }
   }
 
   def createUpload: Route = authenticate { user =>
     entity(as[Upload.Create]) { newUpload =>
-      onSuccess(write[Upload](Uploads.insertUpload(newUpload, user))) { upload =>
-        complete(upload)
+      authorize(user.isInRootOrSameOrganizationAs(newUpload)) {
+        onSuccess(write[Upload](Uploads.insertUpload(newUpload, user))) { upload =>
+          complete(upload)
+        }
       }
     }
   }
 
   def updateUpload(uploadId: UUID): Route = authenticate { user =>
     entity(as[Upload]) { updateUpload =>
-      onSuccess(update(Uploads.updateUpload(updateUpload, uploadId, user))) { count =>
-        complete(StatusCodes.NoContent)
+      authorize(user.isInRootOrSameOrganizationAs(updateUpload)) {
+        onSuccess(update(Uploads.updateUpload(updateUpload, uploadId, user))) {
+          completeSingleOrNotFound
+        }
       }
     }
   }
 
   def deleteUpload(uploadId: UUID): Route = authenticate { user =>
-    onSuccess(drop(Uploads.deleteUpload(uploadId))) {
-      case 1 => complete(StatusCodes.NoContent)
-      case 0 => complete(StatusCodes.NotFound)
-      case count => throw new IllegalStateException(
-        s"Error deleting upload. Delete result expected to be 1, was $count"
-      )
+    onSuccess(drop(Uploads.deleteUpload(uploadId, user))) {
+      completeSingleOrNotFound
     }
   }
 
   def getUploadCredentials(uploadId: UUID): Route = authenticate { user =>
     validateTokenHeader { jwt =>
-      onSuccess(readOne[Upload](Uploads.getUpload(uploadId))) {
+      onSuccess(readOne[Upload](Uploads.getUpload(uploadId, user))) {
         case Some(_) => complete(Auth0DelegationService.getCredentials(user, uploadId, jwt))
         case None => complete(StatusCodes.NotFound)
       }

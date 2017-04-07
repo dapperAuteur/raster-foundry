@@ -5,7 +5,7 @@ import akka.http.scaladsl.unmarshalling._
 import akka.http.scaladsl.model.StatusCodes
 import com.lonelyplanet.akka.http.extensions.{PaginationDirectives, Order}
 
-import com.azavea.rf.common.{Authentication, UserErrorHandler}
+import com.azavea.rf.common.{Authentication, UserErrorHandler, CommonHandlers}
 import com.azavea.rf.database.tables._
 import com.azavea.rf.database.query._
 import com.azavea.rf.database.Database
@@ -25,6 +25,7 @@ trait ProjectRoutes extends Authentication
     with QueryParametersCommon
     with SceneQueryParameterDirective
     with PaginationDirectives
+    with CommonHandlers
     with UserErrorHandler {
 
   implicit def database: Database
@@ -62,6 +63,11 @@ trait ProjectRoutes extends Authentication
         pathPrefix(JavaUUID) { sceneId =>
           get { getProjectSceneColorCorrectParams(projectId, sceneId) } ~
           put { setProjectSceneColorCorrectParams(projectId, sceneId) }
+        } ~
+        pathPrefix("bulk-update-color-corrections") {
+          pathEndOrSingleSlash {
+            post { setProjectScenesColorCorrectParams(projectId) }
+          }
         }
       } ~
       pathPrefix("order") {
@@ -83,8 +89,10 @@ trait ProjectRoutes extends Authentication
 
   def createProject: Route = authenticate { user =>
     entity(as[Project.Create]) { newProject =>
-      onSuccess(Projects.insertProject(newProject.toProject(user.id))) { project =>
-        complete(StatusCodes.Created, project)
+      authorize(user.isInRootOrSameOrganizationAs(newProject)) {
+        onSuccess(Projects.insertProject(newProject.toProject(user.id))) { project =>
+          complete(StatusCodes.Created, project)
+        }
       }
     }
   }
@@ -92,29 +100,24 @@ trait ProjectRoutes extends Authentication
   def getProject(projectId: UUID): Route = authenticate { user =>
     rejectEmptyResponse {
       complete {
-        Projects.getProject(projectId)
+        Projects.getProject(projectId, user)
       }
     }
   }
 
   def updateProject(projectId: UUID): Route = authenticate { user =>
     entity(as[Project]) { updatedProject =>
-      onSuccess(Projects.updateProject(updatedProject, projectId, user)) {
-        case 1 => complete(StatusCodes.NoContent)
-        case count => throw new IllegalStateException(
-          s"Error updating project: update result expected to be 1, was $count"
-        )
+      authorize(user.isInRootOrSameOrganizationAs(updatedProject)) {
+        onSuccess(Projects.updateProject(updatedProject, projectId, user)) {
+          completeSingleOrNotFound
+        }
       }
     }
   }
 
   def deleteProject(projectId: UUID): Route = authenticate { user =>
-    onSuccess(Projects.deleteProject(projectId)) {
-      case 1 => complete(StatusCodes.NoContent)
-      case 0 => complete(StatusCodes.NotFound)
-      case count => throw new IllegalStateException(
-        s"Error deleting project: delete result expected to be 1, was $count"
-      )
+    onSuccess(Projects.deleteProject(projectId, user)) {
+      completeSingleOrNotFound
     }
   }
 
@@ -159,6 +162,15 @@ trait ProjectRoutes extends Authentication
   def setProjectSceneColorCorrectParams(projectId: UUID, sceneId: UUID) = authenticate { user =>
     entity(as[ColorCorrect.Params]) { ccParams =>
       onSuccess(ScenesToProjects.setColorCorrectParams(projectId, sceneId, ccParams)) { sceneToProject =>
+        complete(StatusCodes.NoContent)
+      }
+    }
+  }
+
+  /** Set color correction parameters for a list of scenes */
+  def setProjectScenesColorCorrectParams(projectId: UUID) = authenticate { user =>
+    entity(as[BatchParams]) { params =>
+      onSuccess(ScenesToProjects.setColorCorrectParamsBatch(projectId, params)) { scenesToProject =>
         complete(StatusCodes.NoContent)
       }
     }

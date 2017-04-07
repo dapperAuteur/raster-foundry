@@ -143,15 +143,36 @@ object Projects extends TableQuery(tag => new Projects(tag)) with LazyLogging {
     }.map(Scene.WithRelated.fromRecords)
   }
 
-  /** Get project given a projectId
+  /** Get public project given a projectId
     *
     * @param projectId UUID primary key of project to retrieve
     */
-  def getProject(projectId: UUID)
+  def getPublicProject(projectId: UUID)
+                      (implicit database: DB): Future[Option[Project]] = {
+
+    database.db.run {
+      Projects
+        .filter(_.tileVisibility === Visibility.fromString("PUBLIC"))
+        .filter(_.id === projectId)
+        .result
+        .headOption
+    }
+  }
+
+  /** Get project given a projectId and user
+    *
+    * @param projectId UUID primary key of project to retrieve
+    * @param user      Results will be limited to user's organization
+    */
+  def getProject(projectId: UUID, user: User)
                (implicit database: DB): Future[Option[Project]] = {
 
     database.db.run {
-      Projects.filter(_.id === projectId).result.headOption
+      Projects
+        .filterToSharedOrganizationIfNotInRoot(user)
+        .filter(_.id === projectId)
+        .result
+        .headOption
     }
   }
 
@@ -191,11 +212,15 @@ object Projects extends TableQuery(tag => new Projects(tag)) with LazyLogging {
   /** Delete a given project from the database
     *
     * @param projectId UUID primary key of project to delete
+    * @param user      Results will be limited to user's organization
     */
-  def deleteProject(projectId: UUID)(implicit database: DB): Future[Int] = {
+  def deleteProject(projectId: UUID, user: User)(implicit database: DB): Future[Int] = {
 
     database.db.run {
-      Projects.filter(_.id === projectId).delete
+      Projects
+        .filterToSharedOrganizationIfNotInRoot(user)
+        .filter(_.id === projectId)
+        .delete
     }
   }
 
@@ -219,7 +244,9 @@ object Projects extends TableQuery(tag => new Projects(tag)) with LazyLogging {
     val updateTime = new Timestamp((new Date).getTime)
 
     val updateProjectQuery = for {
-      updateProject <- Projects.filter(_.id === projectId)
+      updateProject <- Projects
+                         .filterToSharedOrganizationIfNotInRoot(user)
+                         .filter(_.id === projectId)
     } yield (
       updateProject.modifiedAt, updateProject.modifiedBy, updateProject.name, updateProject.description,
       updateProject.visibility, updateProject.tileVisibility, updateProject.tags

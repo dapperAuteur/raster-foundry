@@ -12,7 +12,6 @@ import 'angular-nvd3';
 import 'angular-ui-router';
 import 'angular-ui-bootstrap';
 import 'angular-deferred-bootstrap';
-import 'angular-lock';
 import 'ng-infinite-scroll';
 import 'angular-jwt';
 import 'angular-clipboard';
@@ -30,6 +29,8 @@ import 'svg-pan-zoom';
 import 'jointjs';
 import 'angular-load';
 import 'ng-rollbar';
+import 'ng-file-upload';
+import 'angular-filter';
 
 // local scripts
 // import '../assets/js/...';
