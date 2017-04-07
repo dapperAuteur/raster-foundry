@@ -52,11 +52,15 @@ const App = angular.module(
         require('./pages/library/scenes/scenes.module.js').name,
         require('./pages/library/scenes/list/list.module.js').name,
         require('./pages/library/scenes/detail/detail.module.js').name,
-        require('./pages/library/projects/projects.module.js').name,
-        require('./pages/library/projects/list/list.module.js').name,
-        require('./pages/library/projects/detail/detail.module.js').name,
-        require('./pages/library/projects/detail/scene/scene.module.js').name,
-        require('./pages/library/projects/detail/projectScenes/projectScenes.module.js').name,
+
+        // new
+        require('./pages/projects/projects.module.js').name,
+        require('./pages/projects/list/list.module.js').name,
+        require('./pages/projects/detail/detail.module.js').name,
+        require('./pages/projects/detail/scene/scene.module.js').name,
+        require('./pages/projects/detail/projectScenes/projectScenes.module.js').name,
+        require('./pages/projects/edit/edit.module.js').name,
+
         require('./pages/settings/settings.module.js').name,
         require('./pages/share/share.module.js').name,
         require('./pages/settings/profile/profile.module.js').name,
