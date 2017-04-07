@@ -22,7 +22,7 @@ case class Project(
   visibility: Visibility,
   tileVisibility: Visibility,
   isAOIProject: Boolean,
-  aoiCadence: Long, /* Milliseconds */
+  aoiCadenceMillis: Long, /* Milliseconds */
   aoisLastChecked: Timestamp,
   tags: List[String] = List.empty,
   extent: Option[Projected[Geometry]] = None,
@@ -53,7 +53,7 @@ object Project extends GeoJsonSupport {
     visibility: Visibility,
     tileVisibility: Visibility,
     isAOIProject: Boolean,
-    aoiCadence: Long,
+    aoiCadenceMillis: Long,
     tags: List[String]
   ) {
     def toProject(userId: String): Project = {
@@ -71,8 +71,8 @@ object Project extends GeoJsonSupport {
         visibility,
         tileVisibility,
         isAOIProject,
-        aoiCadence,
-        new Timestamp(now.getTime - aoiCadence),
+        aoiCadenceMillis,
+        new Timestamp(now.getTime - aoiCadenceMillis),
         tags
       )
     }
