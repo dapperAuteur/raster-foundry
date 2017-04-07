@@ -13,12 +13,10 @@ case class Export(
   modifiedBy: String,
   organizationId: UUID,
   exportStatus: ExportStatus,
-  fileType: FileType,
-  uploadType: UploadType,
-  files: List[String],
+  exportType: ExportType,
   datasource: UUID,
-  metadata: Json,
-  visibility: Visibility
+  visibility: Visibility,
+  exportOptions: ExportOptions
 )
 
 object Export {
@@ -29,31 +27,27 @@ object Export {
 
   case class Create(
     organizationId: UUID,
-    uploadStatus: ExportStatus,
-    fileType: FileType,
-    uploadType: UploadType,
-    files: List[String],
+    exportStatus: ExportStatus,
+    exportType: ExportType,
     datasource: UUID,
-    metadata: Json,
-    visibility: Visibility
+    visibility: Visibility,
+    exportOptions: ExportOptions
   ) {
     def toExport(userId: String): Export = {
       val id = UUID.randomUUID()
       val now = new Timestamp((new java.util.Date()).getTime())
       Export(
         id = id,
-        createdAt = now, // createdAt
-        userId, // createdBy
-        now, // modifiedAt
-        userId, // modifiedBy
-        this.organizationId,
-        this.uploadStatus,
-        this.fileType,
-        this.uploadType,
-        this.files,
-        this.datasource,
-        this.metadata,
-        this.visibility
+        createdAt = now,
+        createdBy = userId,
+        modifiedAt = now,
+        modifiedBy = userId,
+        organizationId = this.organizationId,
+        exportStatus = this.exportStatus,
+        exportType = this.exportType,
+        datasource = this.datasource,
+        visibility = this.visibility,
+        exportOptions = this.exportOptions
       )
     }
   }
