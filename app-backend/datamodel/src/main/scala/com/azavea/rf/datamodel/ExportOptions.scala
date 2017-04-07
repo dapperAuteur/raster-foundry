@@ -4,6 +4,7 @@ import geotrellis.slick.Projected
 import geotrellis.vector.MultiPolygon
 
 import io.circe._
+import io.circe.generic.auto._
 
 case class ExportOptions(
   area: Projected[MultiPolygon],

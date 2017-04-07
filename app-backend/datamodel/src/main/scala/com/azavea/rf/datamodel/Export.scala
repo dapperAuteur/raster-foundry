@@ -14,24 +14,22 @@ case class Export(
   organizationId: UUID,
   exportStatus: ExportStatus,
   exportType: ExportType,
-  datasource: UUID,
   visibility: Visibility,
-  exportOptions: ExportOptions
+  exportOptions: Json
 )
 
 object Export {
 
-  def tupled = (Upload.apply _).tupled
+  def tupled = (Export.apply _).tupled
 
-  def create = Upload.apply _
+  def create = Export.apply _
 
   case class Create(
     organizationId: UUID,
     exportStatus: ExportStatus,
     exportType: ExportType,
-    datasource: UUID,
     visibility: Visibility,
-    exportOptions: ExportOptions
+    exportOptions: Json
   ) {
     def toExport(userId: String): Export = {
       val id = UUID.randomUUID()
@@ -45,7 +43,6 @@ object Export {
         organizationId = this.organizationId,
         exportStatus = this.exportStatus,
         exportType = this.exportType,
-        datasource = this.datasource,
         visibility = this.visibility,
         exportOptions = this.exportOptions
       )
