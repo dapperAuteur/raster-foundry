@@ -610,11 +610,21 @@ paths:
       tags:
         - Imagery
       parameters:
+        - $ref: '#/parameters/uuid'
         - name: aoi
           in: body
           required: true
           schema:
             $ref: '#/definitions/AOI'
+      responses:
+        201:
+          description: Area of Interest created.
+          schema:
+            $ref: '#/definitions/AOI'
+        default:
+          description: Unexpected error.
+          schema:
+            $ref: '#/definitions/Error'
 
   /projects/{uuid}/scenes/:
     get:
@@ -818,11 +828,11 @@ paths:
         200:
           description: "Json summary of the given AOI's filters and Polygons."
           schema:
-            $ref: '#/definition/AOI'
-
+            $ref: '#/definitions/AOI'
     put:
       summary: Update an Area of Interest.
       tags:
+        - Imagery
       parameters:
         - $ref: '#/parameters/uuid'
         - name: aoi
@@ -839,8 +849,8 @@ paths:
             $ref: '#/definitions/Error'
         default:
           description: Unexpected error.
-          schema: '#/definitions/Error'
-
+          schema:
+            $ref: '#/definitions/Error'
     delete:
       summary: Delete a project.
       tags:
@@ -851,8 +861,9 @@ paths:
         204:
           description: Deletion successful.
         404:
-          descripiton: The UUID parameter does not refer to a project or the user does not have access to the project it refers to.
-          schema: '#/definitions/Error'
+          description: The UUID parameter does not refer to a project or the user does not have access to the project it refers to.
+          schema:
+            $ref: '#/definitions/Error'
 
   /map-tokens/:
     get:
@@ -1726,9 +1737,7 @@ definitions:
       area:
         type: object
       filters:
-        type: object
-        schema:
-          $ref: '#/definitions/CombinedSceneQueryParams'
+        $ref: '#/definitions/CombinedSceneQueryParams'
   ColorCorrection:
     type: object
     properties:
