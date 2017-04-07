@@ -3,9 +3,12 @@ package com.azavea.rf.datamodel
 import java.sql.Timestamp
 import java.util.UUID
 
+import cats.syntax.either._
 import geotrellis.slick.Projected
 import geotrellis.vector.Geometry
 import geotrellis.vector.io.json.GeoJsonSupport
+import io.circe._
+import cats.implicits._
 
 // --- //
 
@@ -31,6 +34,9 @@ case class Project(
 
 /** Case class for project creation */
 object Project extends GeoJsonSupport {
+
+  /* One week, in milliseconds */
+  val DEFAULT_CADENCE: Long = 604800000
 
   def tupled = (Project.apply _).tupled
 
@@ -76,5 +82,20 @@ object Project extends GeoJsonSupport {
         tags
       )
     }
+  }
+
+  object Create {
+    /** Custon Circe decoder for [[Create]], to handle default values. */
+    implicit val projectDecoder: Decoder[Create] = Decoder.instance(c =>
+      (c.downField("organizationId").as[UUID]
+        |@| c.downField("name").as[String]
+        |@| c.downField("description").as[String]
+        |@| c.downField("visibility").as[Visibility]
+        |@| c.downField("tileVisibility").as[Visibility]
+        |@| c.downField("isAOIProject").as[Option[Boolean]].map(_.getOrElse(false))
+        |@| c.downField("aoiCadenceMillis").as[Option[Long]].map(_.getOrElse(DEFAULT_CADENCE))
+        |@| c.downField("tags").as[List[String]]
+      ).map(Create.apply)
+    )
   }
 }
